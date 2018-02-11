@@ -99,7 +99,7 @@ int main(int argc, char *argv[])
     TCLAP::ValueArg<bool> cudaArg("g", "use_cuda", "use the GPU (CUDA)", false, true, "bool");
     cmd.add(cudaArg);
 
-    TCLAP::ValueArg<bool> ceresArg("c", "use_ceres", "use CERES (for 3D line optimization)", false, L3D_DEF_USE_CERES, "bool");
+    TCLAP::ValueArg<bool> ceresArg("c", "use_g2o", "use CERES (for 3D line optimization)", false, L3D_DEF_USE_G2O, "bool");
     cmd.add(ceresArg);
 
     TCLAP::ValueArg<float> constRegDepthArg("z", "const_reg_depth", "use a constant regularization depth (only when sigma_p is metric!)", false, -1.0f, "float");
