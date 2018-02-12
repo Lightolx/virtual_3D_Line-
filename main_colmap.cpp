@@ -71,9 +71,6 @@ int main(int argc, char *argv[])
     TCLAP::ValueArg<float> sigma_P_Arg("p", "sigma_p", "position regularizer (if negative: fixed sigma_p in world-coordinates)", false, L3D_DEF_SCORING_POS_REGULARIZER, "float");
     cmd.add(sigma_P_Arg);
 
-    TCLAP::ValueArg<float> epipolarArg("e", "min_epipolar_overlap", "minimum epipolar overlap for matching", false, L3D_DEF_EPIPOLAR_OVERLAP, "float");
-    cmd.add(epipolarArg);
-
     TCLAP::ValueArg<int>  knnArg("k", "knn_matches", "number of matches to be kept (<= 0  --> use all that fulfill overlap)", false, L3D_DEF_KNN, "int");
     cmd.add(knnArg);
 
@@ -128,7 +125,6 @@ int main(int argc, char *argv[])
     float collinearity = collinArg.getValue();
     bool useGPU = cudaArg.getValue();
     bool useG2O = g2oArg.getValue();
-    float epipolarOverlap = fmin(fabs(epipolarArg.getValue()),0.99f);
     float sigmaA = fabs(sigma_A_Arg.getValue());
     float sigmaP = sigma_P_Arg.getValue();
     int kNN = knnArg.getValue();
@@ -382,7 +378,7 @@ int main(int argc, char *argv[])
             // read image
 //            cout << "inputFolder is " << inputFolder << ", cams_images[ID] is " << cams_images[imgID] << endl;
 
-            cv::Mat image = cv::imread(inputFolder+"/"+imgID_imgName[imgID],CV_LOAD_IMAGE_GRAYSCALE);
+            cv::Mat image = cv::imread(inputFolder+"/"+imgID_imgName[imgID],CV_LOAD_IMAGE_COLOR);
 
             // undistort image
             cv::Mat img_undist;
@@ -429,8 +425,7 @@ int main(int argc, char *argv[])
     }
 
     // match images
-    Line3D->matchImages(sigmaP,sigmaA,neighbors,epipolarOverlap,
-                        kNN,constRegDepth);
+    Line3D->matchImages(sigmaP,sigmaA,neighbors,kNN,constRegDepth);
 
     // compute result
     Line3D->reconstruct3Dlines(visibility_t,diffusion,collinearity,useG2O);

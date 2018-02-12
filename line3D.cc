@@ -180,7 +180,7 @@ namespace L3DPP
 
         // detect segments
         L3DPP::DataArray<float4>* lines = NULL;  // line segments of this image, include the coordinate of p1,p2 in dataCPU
-        int line_num = 10;
+        int line_num = 7;
         Eigen::Vector3d Pw[4];       // corresponding rectangle region of these lines in world coordinate
         Eigen::Vector3d centrals[line_num];
         // todo:: here, the relationship of pitch get from R and get from vanish point
@@ -280,7 +280,7 @@ namespace L3DPP
             cv::Point2f a(coordsf4.x, coordsf4.y);
             cv::Point2f b(coordsf4.z, coordsf4.w);
             cv::circle(image, cv::Point2d(vp(0), vp(1)), 2, cv::Scalar(0,255,0));
-            cv::putText(image,std::to_string(i), a, 1, 2, cv::Scalar(0, 255, 255));
+//            cv::putText(image,std::to_string(i), a, 1, 2, cv::Scalar(0, 255, 255));
             cv::line(image, a, b, cv::Scalar(0, 255, 255), 2);
         }
 
@@ -505,8 +505,8 @@ namespace L3DPP
 
     //------------------------------------------------------------------------------
     void Line3D::matchImages(const float sigma_position, const float sigma_angle,
-                             const unsigned int num_neighbors, const float epipolar_overlap,
-                             const int kNN, const float const_regularization_depth)
+                             const unsigned int num_neighbors, const int kNN,
+                             const float const_regularization_depth)
     {
         // no new views can be added in the meantime!
         view_reserve_mutex_.lock();
@@ -527,7 +527,7 @@ namespace L3DPP
         sigma_p_ = sigma_position;
         sigma_a_ = fmin(fabs(sigma_angle),90.0f);
         two_sigA_sqr_ = 2.0f*sigma_a_*sigma_a_;
-        epipolar_overlap_ = fmin(fabs(epipolar_overlap),0.99f);
+        epipolar_overlap_ = fmin(fabs(1),0.99f);
         kNN_ = kNN;
         const_regularization_depth_ = const_regularization_depth;
 
@@ -565,7 +565,7 @@ namespace L3DPP
         }
 
         // translate reconstruction (for better numerical stability)
-//        translate();
+        translate();
 
 #ifdef L3DPP_OPENMP
         #pragma omp parallel for
@@ -623,7 +623,7 @@ namespace L3DPP
         computeMatches();
 
         // translate back
-//        untranslate();
+        untranslate();
 
         /*
         std::ofstream fout;
@@ -865,7 +865,7 @@ namespace L3DPP
             else
                 std::cout << "@CPU: " << std::endl;
 
-            std::cout << "[" << std::setfill('0') << std::setw(L3D_DISP_CAMS) << it->first << "] --> \n";
+            std::cout << "for view " << "[" << std::setfill('0') << std::setw(L3D_DISP_CAMS) << it->first << "] --> \n";
 
             // init GPU data
             if(useGPU_)
@@ -877,8 +877,8 @@ namespace L3DPP
             {
                 if(matched_[it->first].find(*n_it) == matched_[it->first].end())
                 {
-                    // these two images have not yet matched
-                    std::cout << "[" << std::setfill('0') << std::setw(L3D_DISP_CAMS) << *n_it << "] \n";
+                    // these two images have not yet do match
+                    std::cout << "neighbor " << "[" << std::setfill('0') << std::setw(L3D_DISP_CAMS) << *n_it << "] \n";
 
                     // compute fundamental matrix
                     Eigen::Matrix3d F = getFundamentalMatrix(views_[it->first],
@@ -987,6 +987,7 @@ namespace L3DPP
             std::list<L3DPP::Match> remaining;
 
             std::list<L3DPP::Match>::const_iterator it = matches_[src][i].begin();
+            int size = matches_[src][i].size();
             for(; it!=matches_[src][i].end(); ++it)
             {
                 L3DPP::Match m = *it;
@@ -1073,8 +1074,8 @@ namespace L3DPP
         Eigen::Vector3d b = centrals_src.back();
         Eigen::Vector3d c = centrals_tgt.front();
         Eigen::Vector3d d = centrals_tgt.back();
-        Eigen::Vector3d ca = c-a;
-        Eigen::Vector3d cb = c-b;
+//        Eigen::Vector3d ca = c-a;
+//        Eigen::Vector3d cb = c-b;
 
         // todo:: use the driving direction to judge who is front
         bool srcF = true;  // src image is in front
@@ -1083,11 +1084,11 @@ namespace L3DPP
             srcF = false;
         }
 
+        cout << "srcID is " << src << ", tgtID is " << tgt << endl;
         for (int i = 0; i < centrals_src.size(); ++i)
         {
-            cout << "srcID is " << src << ", tgtID is " << tgt << endl;
-            cout << centrals_src[i].x() << " " << centrals_src[i].y() << " " << centrals_src[i].z() << " ";
-            cout << centrals_tgt[i].x() << " " << centrals_tgt[i].y() << " " << centrals_tgt[i].z() << endl;
+            cout << centrals_src[i].x() << std::setfill(' ') << " " << std::setw(10) << centrals_src[i].y() << " " << std::setw(10) << centrals_src[i].z() << " ";
+            cout << centrals_tgt[i].x() << std::setfill(' ') << " " << std::setw(10) << centrals_tgt[i].y() << " " << std::setw(10) << centrals_tgt[i].z() << endl;
         }
 
         int num_lines = v_src->lines()->width();
@@ -1113,10 +1114,11 @@ namespace L3DPP
         std::vector<double>::iterator it = std::min_element(ava_dist.begin(), ava_dist.end());
         double min_ava = *it;
 
-        if (min_ava > 0.15)
-        {
-            return;
-        }
+        // todo:: here, choose a threshold
+//        if (min_ava > 0.15)
+//        {
+//            return;
+//        }
 
         int offset = std::distance(ava_dist.begin(), it) + 1;
         L3DPP::DataArray<float4>* lines_src = v_src->lines();
@@ -1179,9 +1181,9 @@ namespace L3DPP
                 M.depth_q1_ = depths_tgt.x();
                 M.depth_q2_ = depths_tgt.y();
 
-                L3DPP::View* v = views_[src];
+//                L3DPP::View* v = views_[src];
                 // todo::here, watch out!
-                L3DPP::Segment3D seg3D = v->unprojectSegment(M.src_segID_,-M.depth_p1_,-M.depth_p2_);
+//                L3DPP::Segment3D seg3D = v->unprojectSegment(M.src_segID_,-M.depth_p1_,-M.depth_p2_);
 //            std::ofstream fout;
 //            fout.open("/media/psf/Home/Desktop/lines.txt", std::ios::app);
 //
@@ -1206,6 +1208,7 @@ namespace L3DPP
 
             // push kNN matches into list
 //            volatile int tmp = scored_matches.size();
+            int num = scored_matches.size();
             if(kNN_ > 0)
             {
                 while(new_matches < kNN_ && !scored_matches.empty())
@@ -3281,7 +3284,7 @@ namespace L3DPP
     L3DPP::DataArray<float4>* Line3D::addVirtualLines(const cv::Mat& image, cv::Point2f srcQuad[4], int num_lines)
     {
         L3DPP::DataArray<float4>* lines = NULL;
-        lines = new L3DPP::DataArray<float4>(num_lines, 1);
+        lines = new L3DPP::DataArray<float4>(2*num_lines, 1);
 
         cv::Point2f dstQuad[4];
         dstQuad[0].x = 500; dstQuad[0].y = 500;
@@ -3310,14 +3313,16 @@ namespace L3DPP
                 interPts.push_back(cv::Point2f(500 + 250*j, 500 + interval*i));
             }
 
-//            for (int j = 0; j < 2; ++j)
-//            {
-//                interPts.push_back(cv::Point2f(500 + interval*i, 500 + 250*j));
-//            }
+            for (int j = 0; j < 2; ++j)
+            {
+                interPts.push_back(cv::Point2f(500 + interval*i, 500 + 250*j));
+            }
         }
 
+        volatile int tmpSize = interPts.size();
+
         std::vector<cv::Point2f> interPair;
-        interPair.reserve(num_lines);
+        interPair.reserve(2*num_lines);
 
         for (int i = 0; i < interPts.size(); ++i)
         {
@@ -3340,8 +3345,8 @@ namespace L3DPP
 //        interPair.push_back(srcQuad[2]);
 //        interPair.push_back(srcQuad[3]);
 
-        int count = num_lines-1;
-//        num_lines *= 2;
+        int count = 2*num_lines-1;
+        num_lines *= 2;
         for(int32_t i = 0; i < num_lines*2; i += 2)
         {
             float4 tempf4;
