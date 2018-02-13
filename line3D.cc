@@ -180,7 +180,7 @@ namespace L3DPP
 
         // detect segments
         L3DPP::DataArray<float4>* lines = NULL;  // line segments of this image, include the coordinate of p1,p2 in dataCPU
-        int line_num = 7;
+        int line_num = 10;
         Eigen::Vector3d Pw[4];       // corresponding rectangle region of these lines in world coordinate
         Eigen::Vector3d centrals[line_num];
         // todo:: here, the relationship of pitch get from R and get from vanish point
@@ -209,7 +209,7 @@ namespace L3DPP
             lines = addVirtualLines(image, srcQuad, line_num);
 
             // find ROI
-            double height = 2; // set camera height to be 2.0m
+            double height = 2.5; // set camera height to be 2.0m
             Eigen::Vector3d vpX = K.inverse()*Eigen::Vector3d(vp(0), vp(1), 1);  // vanish point on normlized plane
             Eigen::Vector3d CX = K.inverse()*Eigen::Vector3d(image.cols/2, image.rows/2, 1); // optical center on normalized plane
             double pitch_R = euler_angle(2);
@@ -3284,7 +3284,7 @@ namespace L3DPP
     L3DPP::DataArray<float4>* Line3D::addVirtualLines(const cv::Mat& image, cv::Point2f srcQuad[4], int num_lines)
     {
         L3DPP::DataArray<float4>* lines = NULL;
-        lines = new L3DPP::DataArray<float4>(2*num_lines, 1);
+        lines = new L3DPP::DataArray<float4>(num_lines, 1);
 
         cv::Point2f dstQuad[4];
         dstQuad[0].x = 500; dstQuad[0].y = 500;
@@ -3313,16 +3313,16 @@ namespace L3DPP
                 interPts.push_back(cv::Point2f(500 + 250*j, 500 + interval*i));
             }
 
-            for (int j = 0; j < 2; ++j)
-            {
-                interPts.push_back(cv::Point2f(500 + interval*i, 500 + 250*j));
-            }
+//            for (int j = 0; j < 2; ++j)
+//            {
+//                interPts.push_back(cv::Point2f(500 + interval*i, 500 + 250*j));
+//            }
         }
 
         volatile int tmpSize = interPts.size();
 
         std::vector<cv::Point2f> interPair;
-        interPair.reserve(2*num_lines);
+        interPair.reserve(num_lines);
 
         for (int i = 0; i < interPts.size(); ++i)
         {
@@ -3345,8 +3345,8 @@ namespace L3DPP
 //        interPair.push_back(srcQuad[2]);
 //        interPair.push_back(srcQuad[3]);
 
-        int count = 2*num_lines-1;
-        num_lines *= 2;
+        int count = num_lines-1;
+//        num_lines *= 2;
         for(int32_t i = 0; i < num_lines*2; i += 2)
         {
             float4 tempf4;
