@@ -118,7 +118,7 @@ int main(int argc, char *argv[])
     if(outputFolder.length() == 0)
         outputFolder = sfmFolder+"/Line3D++/";
 
-    int maxWidth = scaleArg.getValue();
+//    int maxWidth = scaleArg.getValue();
     unsigned int neighbors = std::max(neighborArg.getValue(),2);
     bool diffusion = diffusionArg.getValue();
     bool loadAndStore = loadArg.getValue();
@@ -137,8 +137,7 @@ int main(int argc, char *argv[])
     boost::filesystem::create_directory(dir);
 
     // create Line3D++ object
-    L3DPP::Line3D* Line3D = new L3DPP::Line3D(outputFolder,loadAndStore,maxWidth,
-                                              maxNumSegments,true,useGPU);
+    L3DPP::Line3D* Line3D = new L3DPP::Line3D(outputFolder,loadAndStore,maxNumSegments,true,useGPU);
 
     // check if result files exist
     boost::filesystem::path sfm_cameras(sfmFolder+"/cameras.txt");
@@ -395,7 +394,6 @@ int main(int argc, char *argv[])
             }
 
             // add image
-            // todo::here, change img_vp to vps
             Line3D->addImage(imgID,img_undist,K,R,t,vps[imgID]);
 
             /*

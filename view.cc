@@ -456,6 +456,7 @@ namespace L3DPP
     //------------------------------------------------------------------------------
     float View::regularizerFrom3Dpoint(const Eigen::Vector3d& P)
     {
+        volatile double depth = (P-C_).norm();
         return (P-C_).norm()*k_;
     }
 

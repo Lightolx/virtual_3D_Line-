@@ -7,13 +7,11 @@ namespace L3DPP
 {
     //------------------------------------------------------------------------------
     Line3D::Line3D(const std::string& output_folder, const bool load_segments,
-                   const int max_img_width,
                    const unsigned int max_line_segments,
                    const bool neighbors_by_worldpoints,
                    const bool use_GPU) :
         data_folder_(output_folder+"L3D++_data/"), load_segments_(load_segments),
-        max_image_width_(max_img_width), max_line_segments_(max_line_segments),
-        neighbors_by_worldpoints_(neighbors_by_worldpoints)
+        max_line_segments_(max_line_segments), neighbors_by_worldpoints_(neighbors_by_worldpoints)
 
     {
         // set params
@@ -178,100 +176,75 @@ namespace L3DPP
         fout.close();
          */
 
+//        Eigen::Vector3d C = -R.inverse()*t;
+//        std::ofstream fout("/media/psf/Home/Desktop/center.txt", std::ios::app);
+//        fout << C.x() << " " << C.y() << " " << C.z() << endl;
+//        fout.close();
+
         // detect segments
         L3DPP::DataArray<float4>* lines = NULL;  // line segments of this image, include the coordinate of p1,p2 in dataCPU
-        int line_num = 10;
-        Eigen::Vector3d Pw[4];       // corresponding rectangle region of these lines in world coordinate
-        Eigen::Vector3d centrals[line_num];
-        // todo:: here, the relationship of pitch get from R and get from vanish point
-        Eigen::Vector3d euler_angle = R.eulerAngles(2,1,0);
-        double pitch = euler_angle(2);
-        Eigen::Vector3d C;
-        if(line_segments.size() == 0)
-        {
-            // detect segments using LSD algorithm
+        // detect segments using LSD algorithm
 //            lines = detectLineSegments(imgID,image);
-            // add visual lines
-            int h = image.rows;
-            int w = image.cols;
-            double ka = vp(0)/(vp(1) - h);
-            double ta = -double(h)*ka;
-            double kb = (vp(0)-w)/(vp(1)-h);
-            double tb = -double(h)*kb + w;
+        // add visual lines
+        int h = image.rows;
+        int w = image.cols;
+        double ka = vp(0)/(vp(1) - h);
+        double ta = -double(h)*ka;
+        double kb = (vp(0)-w)/(vp(1)-h);
+        double tb = -double(h)*kb + w;
 
-            cv::Point2f srcQuad[4];  // set four corner point empirically, height is 550 and 700, respectively
-            int height_up = 550;
-            int height_down = 700;
-            srcQuad[0].y = height_up;srcQuad[0].x = ka*srcQuad[0].y + ta;
-            srcQuad[1].y = height_down;srcQuad[1].x = ka*srcQuad[1].y + ta;
-            srcQuad[2].y = height_up;srcQuad[2].x = kb*srcQuad[2].y + tb;
-            srcQuad[3].y = height_down;srcQuad[3].x = kb*srcQuad[3].y + tb;
-            lines = addVirtualLines(image, srcQuad, line_num);
+        int height_up = 550;
+        int height_down = 700;
+        cv::Point2f srcQuad[4];  // set four corner point empirically, height is 550 and 700, respectively
+        srcQuad[0].y = height_up;srcQuad[0].x = ka*srcQuad[0].y + ta;
+        srcQuad[1].y = height_down;srcQuad[1].x = ka*srcQuad[1].y + ta;
+        srcQuad[2].y = height_up;srcQuad[2].x = kb*srcQuad[2].y + tb;
+        srcQuad[3].y = height_down;srcQuad[3].x = kb*srcQuad[3].y + tb;
+        // todo:: watch out! when the line num increase, layering may occur
+        int line_num = 10;
+        lines = addVirtualLines(image, srcQuad, line_num);
 
-            // find ROI
-            double height = 2.5; // set camera height to be 2.0m
-            Eigen::Vector3d vpX = K.inverse()*Eigen::Vector3d(vp(0), vp(1), 1);  // vanish point on normlized plane
-            Eigen::Vector3d CX = K.inverse()*Eigen::Vector3d(image.cols/2, image.rows/2, 1); // optical center on normalized plane
-            double pitch_R = euler_angle(2);
-            double pitch_vp = acos(vpX.dot(CX)/(vpX.squaredNorm()*CX.squaredNorm()));  // pithc angle
-            Eigen::Vector3d nVec(0, cos(pitch_vp), sin(pitch_vp));  // road plane norm vector in camera frame
+        // find ROI
+        // todo:: how to iterate h??? it is the most important things now
+        double height = 3.5; // set camera height to be 2.0m
+        Eigen::Vector3d vpX = K.inverse()*Eigen::Vector3d(vp(0), vp(1), 1);  // vanish point on normlized plane
+        Eigen::Vector3d CX = K.inverse()*Eigen::Vector3d(image.cols/2, image.rows/2, 1); // optical center on normalized plane
+        double pitch = acos(vpX.dot(CX)/(vpX.squaredNorm()*CX.squaredNorm()));  // pithc angle
+        Eigen::Vector3d nVec(0, cos(pitch), sin(pitch));  // road plane norm vector in camera frame
 
-            // find ROI
-            Eigen::Vector3d srcQ[4];
-//            std::ofstream fout("/media/psf/Home/Desktop/rec.txt", std::ios::app);
-//            fout << "for image " << camID << ":\n";
-            for (int i = 0; i < 4; ++i)  // homogeneous
-            {
-                srcQ[i](0) = srcQuad[i].x;
-                srcQ[i](1) = srcQuad[i].y;
-                srcQ[i](2) = 1;
-
-                Eigen::Vector3d x2d = srcQ[i];              // point on image plane
-                Eigen::Vector3d x3dc = K.inverse()*x2d;     // arbitrary 3d point in camera frame
-//                x3dc.y() = x3dc.y();
-//                nVec = Eigen::Vector3d(0,0.732,0.5);
-//                double temp = nVec.dot(x3dc);
-                double lamda = height/(nVec.dot(x3dc));     // scale between x3dc and the point on road plane
-                Eigen::Vector3d x3dcp = lamda*x3dc;         // 3d point on road plane in camera frame
-//                x3dcp.y() = x3dcp.y();
-                C = -R.inverse()*t;
-                Eigen::Vector3d point3dw = R.inverse()*(x3dcp - t);  // 3d point in world coordinate
-
-                Pw[i] = point3dw;
-//                fout << point3dw(0) << " " << point3dw(1) << " " << point3dw(2) << " ";
-            }
-//            fout << std::endl;
-//            fout.close();
-
-            // assign each line the 3D coordinate of its center
-            Eigen::Vector3d central(0,0,0);
-            for (int i = 0; i < line_num; ++i)
-            {
-                central.x() = (lines->dataCPU(i,0)[0].x +  lines->dataCPU(i,0)[0].z)/2;
-                central.y() = (lines->dataCPU(i,0)[0].y +  lines->dataCPU(i,0)[0].w)/2;
-                central.z() = 1;
-                Eigen::Vector3d x2d = central;              // point on image plane
-                Eigen::Vector3d x3dc = K.inverse()*x2d;     // arbitrary 3d point in camera frame
-                double lamda = height/(nVec.dot(x3dc));     // scale between x3dc and the point on road plane
-                Eigen::Vector3d x3dcp = lamda*x3dc;         // 3d point on road plane in camera frame
-                Eigen::Vector3d point3dw = R.inverse()*(x3dcp - t);  // 3d point in world coordinate
-                centrals[i] = point3dw;
-            }
-        }
-        else
+        // find ROI
+        Eigen::Vector3d srcQ[4];
+        Eigen::Vector3d Pw[4];       // corresponding rectangle region of these lines in world coordinate
+        for (int i = 0; i < 4; ++i)  // homogeneous
         {
-            // use given segments
-            lines = new L3DPP::DataArray<float4>(line_segments.size(),1);
-            for(size_t i=0; i<line_segments.size(); ++i)
-            {
-                cv::Vec4f coords = line_segments[i];
-                float4 coordsf4;
-                coordsf4.x = coords(0); coordsf4.y = coords(1);
-                coordsf4.z = coords(2); coordsf4.w = coords(3);
-                lines->dataCPU(i,0)[0] = coordsf4;
-            }
+            srcQ[i](0) = srcQuad[i].x;
+            srcQ[i](1) = srcQuad[i].y;
+            srcQ[i](2) = 1;
+            Eigen::Vector3d x2d = srcQ[i];              // point on image plane
+            Eigen::Vector3d x3dc = K.inverse()*x2d;     // arbitrary 3d point in camera frame
+            double lamda = height/(nVec.dot(x3dc));     // scale between x3dc and the point on road plane
+            Eigen::Vector3d x3dcp = lamda*x3dc;         // 3d point on road plane in camera frame
+            Eigen::Vector3d point3dw = R.inverse()*(x3dcp - t);  // 3d point in world coordinate
+            Pw[i] = point3dw;
         }
 
+        // assign each line the 3D coordinate of its center
+        Eigen::Vector3d central(0,0,0);
+        Eigen::Vector3d centrals[line_num];  // centers of each virtual line
+        for (int i = 0; i < line_num; ++i)
+        {
+            central.x() = (lines->dataCPU(i,0)[0].x + lines->dataCPU(i,0)[0].z)/2;
+            central.y() = (lines->dataCPU(i,0)[0].y + lines->dataCPU(i,0)[0].w)/2;
+            central.z() = 1;
+            Eigen::Vector3d x2d = central;              // point on image plane
+            Eigen::Vector3d x3dc = K.inverse()*x2d;     // arbitrary 3d point in camera frame
+            double lamda = height/(nVec.dot(x3dc));     // scale between x3dc and the point on road plane
+            Eigen::Vector3d x3dcp = lamda*x3dc;         // 3d point on road plane in camera frame
+            Eigen::Vector3d point3dw = R.inverse()*(x3dcp - t);  // 3d point in world coordinate
+            centrals[i] = point3dw;
+        }
+
+        /*
         // show image and the virtual line
         for (int i = 0; i < lines->width(); ++i)
         {
@@ -279,13 +252,14 @@ namespace L3DPP
 //            cout << coordsf4.x << ", " << coordsf4.y << ", " << coordsf4.w << ", " << coordsf4.z << endl;
             cv::Point2f a(coordsf4.x, coordsf4.y);
             cv::Point2f b(coordsf4.z, coordsf4.w);
-            cv::circle(image, cv::Point2d(vp(0), vp(1)), 2, cv::Scalar(0,255,0));
+            cv::circle(image, cv::Point2d(vp(0), vp(1)), 8, cv::Scalar(0,255,0));
 //            cv::putText(image,std::to_string(i), a, 1, 2, cv::Scalar(0, 255, 255));
             cv::line(image, a, b, cv::Scalar(0, 255, 255), 2);
         }
 
         cv::imshow("virtual line", image);
         cv::waitKey(1);
+         */
 
         if(lines == NULL)
         {
@@ -313,20 +287,7 @@ namespace L3DPP
         processed_[imgID] = false;
         visual_neighbors_[imgID] = std::set<unsigned int>();
         num_lines_total_ += lines->width();
-//        views_avg_depths_.push_back(fmax(median_depth,L3D_EPS));
 
-        /*
-        if(neighbors_by_worldpoints_)
-        {
-            // process worldpoint list
-            processWPlist(imgID,wps_or_neighbors);
-        }
-        else
-        {
-            // neighbors explicitely given
-            setVisualNeighbors(imgID,wps_or_neighbors);
-        }
-         */
         view_mutex_.unlock();
     }
 
@@ -352,6 +313,7 @@ namespace L3DPP
     //------------------------------------------------------------------------------
     L3DPP::DataArray<float4>* Line3D::detectLineSegments(const unsigned int camID, const cv::Mat& image)
     {
+        /*
         // check image format
         cv::Mat imgGray;
         if(image.type() == CV_8UC3)
@@ -454,7 +416,7 @@ namespace L3DPP
                 Y = p1y + round(j * intervalY);
                 tmpImage.at<uchar>(Y, X) = 0;
             }
-             */
+
 
             float dx = seg2D.p1x_-seg2D.p2x_;
             float dy = seg2D.p1y_-seg2D.p2y_;
@@ -501,6 +463,7 @@ namespace L3DPP
         }
 
         return NULL;
+         */
     }
 
     //------------------------------------------------------------------------------
@@ -865,7 +828,7 @@ namespace L3DPP
             else
                 std::cout << "@CPU: " << std::endl;
 
-            std::cout << "for view " << "[" << std::setfill('0') << std::setw(L3D_DISP_CAMS) << it->first << "] --> \n";
+            std::cout << "for view " << "[" << std::setfill('0') << std::setw(L3D_DISP_CAMS) << it->first << "], match it and its neighbor";
 
             // init GPU data
             if(useGPU_)
@@ -878,7 +841,7 @@ namespace L3DPP
                 if(matched_[it->first].find(*n_it) == matched_[it->first].end())
                 {
                     // these two images have not yet do match
-                    std::cout << "neighbor " << "[" << std::setfill('0') << std::setw(L3D_DISP_CAMS) << *n_it << "] \n";
+                    std::cout << "[" << std::setfill('0') << std::setw(L3D_DISP_CAMS) << *n_it << "], ";
 
                     // compute fundamental matrix
                     Eigen::Matrix3d F = getFundamentalMatrix(views_[it->first],
@@ -1084,12 +1047,12 @@ namespace L3DPP
             srcF = false;
         }
 
-        cout << "srcID is " << src << ", tgtID is " << tgt << endl;
-        for (int i = 0; i < centrals_src.size(); ++i)
-        {
-            cout << centrals_src[i].x() << std::setfill(' ') << " " << std::setw(10) << centrals_src[i].y() << " " << std::setw(10) << centrals_src[i].z() << " ";
-            cout << centrals_tgt[i].x() << std::setfill(' ') << " " << std::setw(10) << centrals_tgt[i].y() << " " << std::setw(10) << centrals_tgt[i].z() << endl;
-        }
+//        cout << "srcID is " << src << ", tgtID is " << tgt << endl;
+//        for (int i = 0; i < centrals_src.size(); ++i)
+//        {
+//            cout << centrals_src[i].x() << std::setfill(' ') << " " << std::setw(10) << centrals_src[i].y() << " " << std::setw(10) << centrals_src[i].z() << " ";
+//            cout << centrals_tgt[i].x() << std::setfill(' ') << " " << std::setw(10) << centrals_tgt[i].y() << " " << std::setw(10) << centrals_tgt[i].z() << endl;
+//        }
 
         int num_lines = v_src->lines()->width();
         std::vector<double> ava_dist(num_lines-1);
@@ -1192,7 +1155,7 @@ namespace L3DPP
 //
 //            fout.close();
 
-                if(kNN_ > 0)
+                if(kNN_ > 0)  // only use  kNN_ matches at most
                 {
                     // kNN matching
                     scored_matches.push(M);
@@ -1604,7 +1567,8 @@ namespace L3DPP
                 reg2 = 2.0f*sig2*sig2;
 
                 // compute spatial regularizers (tgt)
-                //TODO:: why dont here use M.depth_p3_, M.depth_p4_
+                //TODO:: why dont here use M.depth_q1_, M.depth_q2_
+                // ans:: it seems equal
                 float sig1_tgt = views_[M.tgt_camID_]->regularizerFrom3Dpoint(M3D.P1());
                 float sig2_tgt = views_[M.tgt_camID_]->regularizerFrom3Dpoint(M3D.P2());
 
@@ -1626,6 +1590,7 @@ namespace L3DPP
                         {
                             if(sim > score_per_cam[M2.tgt_camID_])
                             {
+                                //one target image will only contribute one seg to support this match
                                 score3D -= score_per_cam[M2.tgt_camID_];
                                 score3D += sim;
                                 score_per_cam[M2.tgt_camID_] = sim;
@@ -1783,7 +1748,8 @@ namespace L3DPP
                                        const L3DPP::Segment3D& seg3D1,
                                        const float reg1, const float reg2)
     {
-        // todo:: loose the constraint
+        // todo:: loose the constraint, cause we cannot garantee that endpoints meet well
+        // todo:: a new method computing similarity must be applied here
         float Reg1 = reg1*100;
         float Reg2 = reg2*100;
         L3DPP::Segment3D seg3D2 = unprojectMatch(m2,true);
@@ -1806,10 +1772,14 @@ namespace L3DPP
             volatile float tmp1 = expf(-d1*d1/Reg1);
             volatile float tmp2 = expf(-d2*d2/Reg2);
 
+//            volatile float tmp3 = expf(-d1*d1/reg1);
+//            volatile float tmp4 = expf(-d2*d2/reg2);
+
             sim_p = fmin(expf(-d1*d1/Reg1),expf(-d2*d2/Reg2));
         }
 
-        float sim = fmin(sim_a,sim_p);
+//        float sim = fmin(sim_a,sim_p);
+        float sim = sim_a;  // todo:: sim_p can also provide something
         if(sim > L3D_DEF_MIN_SIMILARITY_3D)
             return sim;
         else
@@ -1878,6 +1848,7 @@ namespace L3DPP
 
         float reg11,reg12,reg21,reg22;
         float sig11;
+        // every depth will be assigned a value as small as possible, to garantee accuracy
         if(m1.depth_p1_ > cutoff1)
             sig11 = cutoff1*v1->k();
         else
@@ -2008,6 +1979,7 @@ namespace L3DPP
             if(best_match.score3D_ > L3D_DEF_MIN_BEST_SCORE_3D)
             {
                 L3DPP::Segment2D seg(src,i);
+                // use src or tgt to estimate the 3D position? true or false?
                 L3DPP::Segment3D seg3D = unprojectMatch(best_match,true);
                 best_match_mutex_.lock();
                 // record the ID of the estimated_position3D and the cameraID and line segment ID
@@ -2027,7 +1999,6 @@ namespace L3DPP
         }
 
         num_matches_[src] = num_valid;
-
         // median depth for this view
         float med_depth = L3D_EPS;
         if(depths.size() > 0)
@@ -2064,8 +2035,7 @@ namespace L3DPP
                     m_inv.depth_q1_ = m.depth_p1_;
                     m_inv.depth_q2_ = m.depth_p2_;
                     m_inv.score3D_ = 0.0f;          //TODO::why here not m_inv.score3D = m.score3D?
-                    // well, maybe it does not matter how many matches there are, only the score3D_ counts, even if the
-                    // matches redundant, the tgtID is the same, so the score3D_ will not be influenced
+                    // well, cause m_inv.score3D != m.score3D, it should be compute by scoreCPU, here is a initialization
 
                     matches_[m.tgt_camID_][m.tgt_segID_].push_back(m_inv);
                     ++num_matches_[m.tgt_camID_];
@@ -2240,7 +2210,7 @@ namespace L3DPP
         for(size_t i=0; i<estimated_position3D_.size(); ++i)
         {
             L3DPP::Segment3D seg3D = estimated_position3D_[i].first;
-            L3DPP::Match m = estimated_position3D_[i].second;
+            L3DPP::Match m = estimated_position3D_[i].second;        // best_match for one line segment
             L3DPP::Segment2D seg2D(m.src_camID_,m.src_segID_);
             bool found_aff = false;
             int id1 = -1;
@@ -2253,6 +2223,8 @@ namespace L3DPP
                 L3DPP::Match m2 = *m_it;
                 L3DPP::Segment2D seg2D2(m2.tgt_camID_,m2.tgt_segID_);
 
+                // this similarity is not used for judge which match is reasonable, but to find similarity
+                // between those "best matches" on 2D plane
                 float sim = similarity(seg3D,m,seg2D2,false);
 
                 if(sim > L3D_DEF_MIN_AFFINITY && unused(seg2D,seg2D2))
@@ -3245,10 +3217,10 @@ namespace L3DPP
         std::stringstream str;
         str << "Line3D++__";
 
-        if(max_image_width_ > 0)
-            str << "W_" << max_image_width_ << "__";
-        else
-            str << "W_FULL__";
+//        if(max_image_width_ > 0)
+//            str << "W_" << max_image_width_ << "__";
+//        else
+//            str << "W_FULL__";
 
         str << "N_" << num_neighbors_ << "__";
 
