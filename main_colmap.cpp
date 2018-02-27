@@ -227,6 +227,9 @@ int main(int argc, char *argv[])
             }
 
             Eigen::Matrix3d K;
+//            K(0,0) = fx/1000; K(0,1) = 0;  K(0,2) = cx/1000;
+//            K(1,0) = 0;  K(1,1) = fy/1000; K(1,2) = cy/1000;
+//            K(2,0) = 0;  K(2,1) = 0;  K(2,2) = 1;
             K(0,0) = fx; K(0,1) = 0;  K(0,2) = cx;
             K(1,0) = 0;  K(1,1) = fy; K(1,2) = cy;
             K(2,0) = 0;  K(2,1) = 0;  K(2,2) = 1;
@@ -394,6 +397,7 @@ int main(int argc, char *argv[])
             }
 
             // add image
+            // todo::here, change img_vp to vps
             Line3D->addImage(imgID,img_undist,K,R,t,vps[imgID]);
 
             /*

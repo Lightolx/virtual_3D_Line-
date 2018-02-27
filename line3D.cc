@@ -206,12 +206,38 @@ namespace L3DPP
 
         // find ROI
         // todo:: how to iterate h??? it is the most important things now
-        double height = 3.5; // set camera height to be 2.0m
+        double cam_height = 1.5; // set camera height to be 2.0m
         Eigen::Vector3d vpX = K.inverse()*Eigen::Vector3d(vp(0), vp(1), 1);  // vanish point on normlized plane
-        Eigen::Vector3d CX = K.inverse()*Eigen::Vector3d(image.cols/2, image.rows/2, 1); // optical center on normalized plane
-        double pitch = acos(vpX.dot(CX)/(vpX.squaredNorm()*CX.squaredNorm()));  // pithc angle
+        Eigen::Vector3d CX = Eigen::Vector3d(0, 0, 1); // optical center on normalized plane
+        double pitch = acos(vpX.dot(CX)/(vpX.squaredNorm()*CX.squaredNorm()));
         Eigen::Vector3d nVec(0, cos(pitch), sin(pitch));  // road plane norm vector in camera frame
+        Eigen::Vector3d ypr = (R.inverse()).eulerAngles(2,1,0);
+        Eigen::Vector3d rpy = R.eulerAngles(1,2,0);
+        Eigen::Vector3d yyy = (R.inverse()).eulerAngles(1,2,0);
+        Eigen::Vector3d zzz = (R.inverse()).eulerAngles(0,2,1);
+        double roll = 3.1415926-yyy[0];
+        double pitch1 = 3.1415926-yyy[1];
+        double yaw = 3.1415926+yyy[2];
+        yyy[0] = 3.1415926-yyy[0];
+        yyy[1] = 3.1415926-yyy[1];
+        yyy[2] = 3.1415926+yyy[2];
+        Eigen::Matrix3d Rnew = this->rotationFromRPY(ypr.z(), ypr.y(), ypr.x());
+//        const Eigen::AngleAxisd Rx
+//                = Eigen::AngleAxisd(roll, Eigen::Vector3d::UnitX());
+//        const Eigen::AngleAxisd Ry
+//                = Eigen::AngleAxisd(pitch1, Eigen::Vector3d::UnitY());
+//        const Eigen::AngleAxisd Rz
+//                = Eigen::AngleAxisd(yaw, Eigen::Vector3d::UnitZ());
+//        std::cout << "original R is " << (Rx*Ry*Rz).matrix() << endl;
 
+//        rpy[2] = pitch;
+//        yyy[2] += 3.1415926;
+//        yyy[1] = 3.1415926-yyy[1];
+//        yyy[0] = 0;
+        Eigen::Matrix3d Rnew2 = this->rotationFromRPY(yyy);
+//        Eigen::Matrix3d Rnew2 = this->rotationFromPRY(pry.z(),pry.y(),pry.x());
+        std::cout << "R is\n" << R << "\nRnew is\n" << Rnew << "\nRnew2 is\n" << Rnew2 << std::endl;
+//        std::cout << "R is\n" << R;
         // find ROI
         Eigen::Vector3d srcQ[4];
         Eigen::Vector3d Pw[4];       // corresponding rectangle region of these lines in world coordinate
@@ -222,10 +248,19 @@ namespace L3DPP
             srcQ[i](2) = 1;
             Eigen::Vector3d x2d = srcQ[i];              // point on image plane
             Eigen::Vector3d x3dc = K.inverse()*x2d;     // arbitrary 3d point in camera frame
-            double lamda = height/(nVec.dot(x3dc));     // scale between x3dc and the point on road plane
-            Eigen::Vector3d x3dcp = lamda*x3dc;         // 3d point on road plane in camera frame
-            Eigen::Vector3d point3dw = R.inverse()*(x3dcp - t);  // 3d point in world coordinate
+            volatile double Yproject = nVec.dot(x3dc);
+            double lamda = cam_height/(nVec.dot(x3dc));     // scale between x3dc and the point on road plane
+            Eigen::Vector3d x3dcp = lamda*x3dc;// 3d point on road plane in camera frame
+            volatile double Yproject2 = x3dcp.dot(nVec);
+            Eigen::Vector3d point3dw = Rnew2.inverse()*(x3dcp - t);  // 3d point in world coordinate
             Pw[i] = point3dw;
+            Eigen::Vector3d C = -R.inverse()*t;
+//            double altitude_diff = C.y() - point3dw.y();
+            Eigen::Vector3d diff = Rnew2.inverse()*x3dcp;
+            Eigen::Vector3d diff1 = Rnew2*x3dcp;
+            double altitude_diff = (Rnew2.inverse()*x3dcp).y();
+            if (i == 1)
+            cout << "altitude_diff is " << altitude_diff << endl;
         }
 
         // assign each line the 3D coordinate of its center
@@ -238,7 +273,7 @@ namespace L3DPP
             central.z() = 1;
             Eigen::Vector3d x2d = central;              // point on image plane
             Eigen::Vector3d x3dc = K.inverse()*x2d;     // arbitrary 3d point in camera frame
-            double lamda = height/(nVec.dot(x3dc));     // scale between x3dc and the point on road plane
+            double lamda = cam_height/(nVec.dot(x3dc));     // scale between x3dc and the point on road plane
             Eigen::Vector3d x3dcp = lamda*x3dc;         // 3d point on road plane in camera frame
             Eigen::Vector3d point3dw = R.inverse()*(x3dcp - t);  // 3d point in world coordinate
             centrals[i] = point3dw;
@@ -1078,10 +1113,10 @@ namespace L3DPP
         double min_ava = *it;
 
         // todo:: here, choose a threshold
-//        if (min_ava > 0.15)
-//        {
-//            return;
-//        }
+        if (min_ava > 1)
+        {
+            return;
+        }
 
         int offset = std::distance(ava_dist.begin(), it) + 1;
         L3DPP::DataArray<float4>* lines_src = v_src->lines();
@@ -1144,16 +1179,14 @@ namespace L3DPP
                 M.depth_q1_ = depths_tgt.x();
                 M.depth_q2_ = depths_tgt.y();
 
-//                L3DPP::View* v = views_[src];
-                // todo::here, watch out!
-//                L3DPP::Segment3D seg3D = v->unprojectSegment(M.src_segID_,-M.depth_p1_,-M.depth_p2_);
-//            std::ofstream fout;
-//            fout.open("/media/psf/Home/Desktop/lines.txt", std::ios::app);
-//
-//                fout << seg3D.P1().x() << " " << seg3D.P1().y() << " " << seg3D.P1().z() << " "
-//                     << seg3D.P2().x() << " " << seg3D.P2().y() << " " << seg3D.P2().z() << std::endl;
-//
-//            fout.close();
+                L3DPP::View* v = views_[src];
+//                 todo::here, watch out!
+                L3DPP::Segment3D seg3D = v->unprojectSegment(M.src_segID_,M.depth_p1_,M.depth_p2_);
+                std::ofstream fout;
+                fout.open("/media/psf/Home/Desktop/lines.txt", std::ios::app);
+                fout << seg3D.P1().x() << " " << seg3D.P1().y() << " " << seg3D.P1().z() << " "
+                     << seg3D.P2().x() << " " << seg3D.P2().y() << " " << seg3D.P2().z() << std::endl;
+                fout.close();
 
                 if(kNN_ > 0)  // only use  kNN_ matches at most
                 {
@@ -3532,5 +3565,22 @@ namespace L3DPP
         }
 
         return vps;
+    }
+
+    Eigen::Matrix3d Line3D::rotationFromRPY(const Eigen::Vector3d rpy)
+    {
+        double roll = rpy[0];
+        double pitch = rpy[1];
+        double yaw = rpy[2];
+
+        Eigen::AngleAxisd Rx = Eigen::AngleAxisd(roll, Eigen::Vector3d::UnitY());
+        Eigen::AngleAxisd Ry = Eigen::AngleAxisd(pitch, Eigen::Vector3d::UnitZ());
+        Eigen::AngleAxisd Rz = Eigen::AngleAxisd(yaw, Eigen::Vector3d::UnitX());
+
+        volatile Eigen::Matrix3d RX = Rx.toRotationMatrix();
+        volatile Eigen::Matrix3d RY = Ry.toRotationMatrix();
+        volatile Eigen::Matrix3d RZ = Rz.toRotationMatrix();
+
+        return (Rx*Ry*Rz).toRotationMatrix();
     }
 }
